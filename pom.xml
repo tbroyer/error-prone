@@ -43,7 +43,8 @@
     <compile.testing.version>0.18</compile.testing.version>
     <caffeine.version>2.7.0</caffeine.version>
     <java14.sourceDirectory>${project.basedir}/src/main/java14</java14.sourceDirectory>
-    <java14.build.outputDirectory>${project.build.directory}/classes-java14</java14.build.outputDirectory>
+    <java14.build.outputDirectory>${project.build.outputDirectory}/META-INF/versions/14</java14.build.outputDirectory>
+    <java14.generatedSourcesDirectory>${project.build.directory}/generated-sources/annotations-java14</java14.generatedSourcesDirectory>
   </properties>
 
   <modules>
@@ -112,13 +113,6 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
         <version>2.5</version>
-        <configuration>
-          <archive>
-            <manifestEntries>
-              <Multi-Release>true</Multi-Release>
-            </manifestEntries>
-          </archive>
-        </configuration>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
