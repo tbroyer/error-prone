@@ -308,14 +308,14 @@ abstract class PlaceholderUnificationVisitor
    *   <li>a function that takes pieces of a tree type and recomposes them
    * </ol>
    */
-  private static <T, R> Choice<State<R>> chooseSubtrees(
+  static <T, R> Choice<State<R>> chooseSubtrees(
       State<?> state,
       Function<State<?>, Choice<? extends State<? extends T>>> choice1,
       Function<T, R> finalizer) {
     return choice1.apply(state).transform(s -> s.withResult(finalizer.apply(s.result())));
   }
 
-  private static <T1, T2, R> Choice<State<R>> chooseSubtrees(
+  static <T1, T2, R> Choice<State<R>> chooseSubtrees(
       State<?> state,
       Function<State<?>, Choice<? extends State<? extends T1>>> choice1,
       Function<State<?>, Choice<? extends State<? extends T2>>> choice2,
@@ -330,11 +330,11 @@ abstract class PlaceholderUnificationVisitor
   }
 
   @FunctionalInterface
-  private interface TriFunction<T1, T2, T3, R> {
+  interface TriFunction<T1, T2, T3, R> {
     R apply(T1 t1, T2 t2, T3 t3);
   }
 
-  private static <T1, T2, T3, R> Choice<State<R>> chooseSubtrees(
+  static <T1, T2, T3, R> Choice<State<R>> chooseSubtrees(
       State<?> state,
       Function<State<?>, Choice<? extends State<? extends T1>>> choice1,
       Function<State<?>, Choice<? extends State<? extends T2>>> choice2,
@@ -358,11 +358,11 @@ abstract class PlaceholderUnificationVisitor
   }
 
   @FunctionalInterface
-  private interface QuadFunction<T1, T2, T3, T4, R> {
+  interface QuadFunction<T1, T2, T3, T4, R> {
     R apply(T1 t1, T2 t2, T3 t3, T4 t4);
   }
 
-  private static <T1, T2, T3, T4, R> Choice<State<R>> chooseSubtrees(
+  static <T1, T2, T3, T4, R> Choice<State<R>> chooseSubtrees(
       State<?> state,
       Function<State<?>, Choice<? extends State<? extends T1>>> choice1,
       Function<State<?>, Choice<? extends State<? extends T2>>> choice2,
@@ -662,11 +662,7 @@ abstract class PlaceholderUnificationVisitor
 
   @Override
   public Choice<State<JCCase>> visitCase(final CaseTree node, State<?> state) {
-    return chooseSubtrees(
-        state,
-        s -> unifyStatements(node.getStatements(), s),
-        s -> unify(node.getBody(), s),
-        (stmts, body) -> maker().Case(CaseTree.CaseKind.STATEMENT, List.<JCExpression>of((JCExpression) node.getExpression()), stmts, body));
+    return JdkCompatHelper.unifyCase(this, node, state);
   }
 
   @Override

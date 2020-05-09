@@ -224,9 +224,12 @@ public final class Inliner {
     }
     Name name = asName(var.getName());
     TypeSymbol sym = new TypeVariableSymbol(0, name, null, symtab().noSymbol);
-    typeVar = new TypeVar(sym, var.getUpperBound().inline(this), var.getLowerBound().inline(this));
+    typeVar = new TypeVar(sym, /* bound= */ null, /* lower= */ symtab().botType);
     sym.type = typeVar;
     typeVarCache.put(var.getName(), typeVar);
+    // Any recursive uses of var will point to the same TypeVar object generated above.
+    JdkCompatHelper.setUpperBound(typeVar, var.getUpperBound().inline(this));
+    typeVar.lower = var.getLowerBound().inline(this);
     return typeVar;
   }
 

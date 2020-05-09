@@ -28,6 +28,10 @@ import javax.annotation.Nullable;
 /**
  * {@link UTree} representation of a {@link InstanceOfTree}.
  *
+ * <p>JDK 14 introduces {@link #getPattern()} for pattern matching for {@code instanceof} in <a
+ * href="https://github.com/openjdk/jdk/commit/229e0d16313b10932b9ce7506d84096696983699"
+ * >https://github.com/openjdk/jdk/commit/229e0d16313b10932b9ce7506d84096696983699</a>
+ *
  * @author lowasser@google.com (Louis Wasserman)
  */
 @AutoValue
@@ -36,6 +40,8 @@ abstract class UInstanceOf extends UExpression implements InstanceOfTree {
     return new AutoValue_UInstanceOf(null, expression, type);
   }
 
+  @Nullable
+  @Override
   public abstract JCPattern getPattern();
 
   @Override
