@@ -106,7 +106,7 @@ public class JavacErrorDescriptionListener implements DescriptionListener {
             .filter(Objects::nonNull)
             .collect(toImmutableList());
 
-    String message = messageForFixes(description, appliedFixes);
+    JavacErrorDescription message = JavacErrorDescription.of(description, appliedFixes);
     // Swap the log's source and the current file's source; then be sure to swap them back later.
     JavaFileObject originalSource = log.useSource(sourceFile);
     try {
@@ -153,28 +153,6 @@ public class JavacErrorDescriptionListener implements DescriptionListener {
     }
 
     return !f.getImportsToAdd().isEmpty() || !f.getImportsToRemove().isEmpty();
-  }
-
-  private static String messageForFixes(Description description, List<AppliedFix> appliedFixes) {
-    StringBuilder messageBuilder = new StringBuilder(description.getMessage());
-    boolean first = true;
-    for (AppliedFix appliedFix : appliedFixes) {
-      if (first) {
-        messageBuilder.append("\nDid you mean ");
-      } else {
-        messageBuilder.append(" or ");
-      }
-      if (appliedFix.isRemoveLine()) {
-        messageBuilder.append("to remove this line");
-      } else {
-        messageBuilder.append("'").append(appliedFix.getNewCodeSnippet()).append("'");
-      }
-      first = false;
-    }
-    if (!first) { // appended at least one suggested fix to the message
-      messageBuilder.append("?");
-    }
-    return messageBuilder.toString();
   }
 
   static Factory provider(Context context) {
