@@ -23,6 +23,8 @@ import static com.google.common.base.Verify.verify;
 import com.google.common.base.Supplier;
 import com.google.common.base.Suppliers;
 import com.google.errorprone.BugPattern.SeverityLevel;
+import com.google.errorprone.sarif.SarifDiagnosticHandler;
+import com.google.errorprone.sarif.SarifWriter;
 import com.google.errorprone.scanner.ErrorProneScannerTransformer;
 import com.google.errorprone.scanner.ScannerSupplier;
 import com.google.errorprone.util.ASTHelpers;
@@ -36,14 +38,20 @@ import com.sun.tools.javac.api.ClientCodeWrapper.Trusted;
 import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.Symbol.CompletionFailure;
 import com.sun.tools.javac.main.JavaCompiler;
+import com.sun.tools.javac.main.Option;
 import com.sun.tools.javac.tree.JCTree.JCCompilationUnit;
 import com.sun.tools.javac.util.Context;
 import com.sun.tools.javac.util.Log;
+import com.sun.tools.javac.util.Options;
 import com.sun.tools.javac.util.PropagatedException;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
 import javax.tools.JavaFileObject;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /** A {@link TaskListener} that runs Error Prone over attributed compilation units. */
 @Trusted
@@ -115,8 +123,44 @@ public class ErrorProneAnalyzer implements TaskListener {
 
   private int errorProneErrors = 0;
 
+  private @Nullable SarifDiagnosticHandler sarifDiagnosticHandler;
+  private @Nullable SarifWriter sarifWriter;
+
+  @Override
+  public void started(TaskEvent taskEvent) {
+    if (taskEvent.getKind() == Kind.COMPILATION && errorProneOptions.getSarifOutputFile() != null) {
+      verify(
+          this.sarifDiagnosticHandler == null && this.sarifWriter == null,
+          "Duplicate COMPILATION event");
+      var log = Log.instance(context);
+      try {
+        this.sarifWriter =
+            new SarifWriter(
+                errorProneOptions.getSarifOutputFile(),
+                context.get(Locale.class),
+                Options.instance(context).get(Option.ENCODING),
+                errorProneOptions.patchingOptions().importOrganizer());
+        this.sarifDiagnosticHandler = new SarifDiagnosticHandler(log, this.sarifWriter);
+      } catch (IOException e) {
+        handleIOException(e);
+      }
+    }
+  }
+
   @Override
   public void finished(TaskEvent taskEvent) {
+    if (taskEvent.getKind() == Kind.COMPILATION && errorProneOptions.getSarifOutputFile() != null) {
+      checkNotNull(this.sarifDiagnosticHandler, "Missing COMPILATION start event");
+      var log = Log.instance(context);
+      try {
+        this.sarifWriter.close();
+      } catch (IOException e) {
+        handleIOException(e);
+      }
+      log.popDiagnosticHandler(this.sarifDiagnosticHandler);
+      this.sarifDiagnosticHandler = null;
+      this.sarifWriter = null;
+    }
     if (taskEvent.getKind() != Kind.ANALYZE) {
       return;
     }
@@ -137,6 +181,18 @@ public class ErrorProneAnalyzer implements TaskListener {
         d -> {
           if (d.severity() == SeverityLevel.ERROR) {
             errorProneErrors++;
+          }
+          if (sarifWriter != null) {
+            var originalSource = log.useSource(compilation.getSourceFile());
+            try {
+              sarifWriter.emitResult(d, log.currentSource(), compilation);
+            } catch (IOException e) {
+              handleIOException(e);
+            } finally {
+              if (originalSource != null) {
+                log.useSource(originalSource);
+              }
+            }
           }
           descriptionListener.onDescribed(d);
         };
@@ -176,6 +232,14 @@ public class ErrorProneAnalyzer implements TaskListener {
     } finally {
       log.useSource(originalSource);
     }
+  }
+
+  private static void handleIOException(IOException e) {
+    // TODO: log to "somewhere" (not to Log, as it could try to use the diagnostic handler)
+    e.printStackTrace();
+    // let the exception propagate to javac's main, where it will cause the compilation to
+    // terminate with Result.ABNORMAL
+    throw new UncheckedIOException(e);
   }
 
   private static Object getDetailValue(CompletionFailure completionFailure) {

@@ -35,6 +35,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
+import org.checkerframework.checker.nullness.qual.Nullable;
 
 /**
  * Processes command-line options specific to error-prone.
@@ -52,6 +53,7 @@ public class ErrorProneOptions {
   private static final String PATCH_IMPORT_ORDER_PREFIX = "-XepPatchImportOrder:";
   private static final String EXCLUDED_PATHS_PREFIX = "-XepExcludedPaths:";
   private static final String IGNORE_LARGE_CODE_GENERATORS = "-XepIgnoreLargeCodeGenerators:";
+  private static final String SARIF_OUTPUT_LOCATION = "-XepSarifLocation:";
 
   private static final String ERRORS_AS_WARNINGS_FLAG = "-XepAllErrorsAsWarnings";
   private static final String ENABLE_ALL_CHECKS = "-XepAllDisabledChecksAsWarnings";
@@ -72,6 +74,7 @@ public class ErrorProneOptions {
             || option.startsWith(PATCH_OUTPUT_LOCATION)
             || option.startsWith(PATCH_CHECKS_PREFIX)
             || option.startsWith(EXCLUDED_PATHS_PREFIX)
+            || option.startsWith(SARIF_OUTPUT_LOCATION)
             || option.equals(IGNORE_UNKNOWN_CHECKS_FLAG)
             || option.equals(DISABLE_WARNINGS_IN_GENERATED_CODE_FLAG)
             || option.equals(ERRORS_AS_WARNINGS_FLAG)
@@ -172,6 +175,7 @@ public class ErrorProneOptions {
   private final Pattern excludedPattern;
   private final boolean ignoreSuppressionAnnotations;
   private final boolean ignoreLargeCodeGenerators;
+  private final @Nullable String sarifOutputFile;
 
   private ErrorProneOptions(
       ImmutableMap<String, Severity> severityMap,
@@ -188,7 +192,8 @@ public class ErrorProneOptions {
       PatchingOptions patchingOptions,
       Pattern excludedPattern,
       boolean ignoreSuppressionAnnotations,
-      boolean ignoreLargeCodeGenerators) {
+      boolean ignoreLargeCodeGenerators,
+      @Nullable String sarifOutputFile) {
     this.severityMap = severityMap;
     this.remainingArgs = remainingArgs;
     this.ignoreUnknownChecks = ignoreUnknownChecks;
@@ -204,6 +209,7 @@ public class ErrorProneOptions {
     this.excludedPattern = excludedPattern;
     this.ignoreSuppressionAnnotations = ignoreSuppressionAnnotations;
     this.ignoreLargeCodeGenerators = ignoreLargeCodeGenerators;
+    this.sarifOutputFile = sarifOutputFile;
   }
 
   public String[] getRemainingArgs() {
@@ -258,6 +264,10 @@ public class ErrorProneOptions {
     return excludedPattern;
   }
 
+  public @Nullable String getSarifOutputFile() {
+    return sarifOutputFile;
+  }
+
   private static class Builder {
     private boolean ignoreUnknownChecks = false;
     private boolean disableAllWarnings = false;
@@ -273,6 +283,7 @@ public class ErrorProneOptions {
     private final ErrorProneFlags.Builder flagsBuilder = ErrorProneFlags.builder();
     private final PatchingOptions.Builder patchingOptionsBuilder = PatchingOptions.builder();
     private Pattern excludedPattern;
+    private String sarifOutputFile;
 
     private void parseSeverity(String arg) {
       // Strip prefix
@@ -357,6 +368,11 @@ public class ErrorProneOptions {
     }
 
     public ErrorProneOptions build(ImmutableList<String> remainingArgs) {
+      var patchingOptions = patchingOptionsBuilder.build();
+      if (sarifOutputFile != null && patchingOptions.doRefactor()) {
+        throw new InvalidCommandLineOptionException(
+            "SARIF output and patching are mutually exclusive");
+      }
       return new ErrorProneOptions(
           ImmutableMap.copyOf(severityMap),
           remainingArgs,
@@ -369,14 +385,19 @@ public class ErrorProneOptions {
           isTestOnlyTarget,
           isPubliclyVisibleTarget,
           flagsBuilder.build(),
-          patchingOptionsBuilder.build(),
+          patchingOptions,
           excludedPattern,
           ignoreSuppressionAnnotations,
-          ignoreLargeCodeGenerators);
+          ignoreLargeCodeGenerators,
+          sarifOutputFile);
     }
 
     public void setExcludedPattern(Pattern excludedPattern) {
       this.excludedPattern = excludedPattern;
+    }
+
+    public void setSarifOutputFile(String sarifOutputFile) {
+      this.sarifOutputFile = sarifOutputFile;
     }
   }
 
@@ -478,6 +499,12 @@ public class ErrorProneOptions {
           } else if (arg.startsWith(EXCLUDED_PATHS_PREFIX)) {
             String pathRegex = arg.substring(EXCLUDED_PATHS_PREFIX.length());
             builder.setExcludedPattern(Pattern.compile(pathRegex));
+          } else if (arg.startsWith(SARIF_OUTPUT_LOCATION)) {
+            String remaining = arg.substring(SARIF_OUTPUT_LOCATION.length());
+            if (remaining.isEmpty()) {
+              throw new InvalidCommandLineOptionException("invalid flag: " + arg);
+            }
+            builder.setSarifOutputFile(remaining);
 
           } else {
             if (arg.startsWith(PREFIX)) {
